@@ -39,4 +39,7 @@ endif()
 
 
 include(GoogleTest)
-gtest_discover_tests(SHealthBMITest)
+gtest_discover_tests(
+    SHealthBMITest
+    PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
