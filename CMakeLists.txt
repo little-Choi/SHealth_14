@@ -18,16 +18,25 @@ target_link_libraries(SHealthBMI PRIVATE shealth_lib)
 include(FetchContent)
 FetchContent_Declare(
     googletest
-    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    URL https://github.com/google/googletest/archive/refs/tags/v1.16.0.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    TLS_VERIFY OFF
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
 
 enable_testing()
 
 # Test executable
 add_executable(SHealthBMITest src/test/cpp/SHealthBMITest.cpp)
 target_link_libraries(SHealthBMITest PRIVATE shealth_lib GTest::gtest_main)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(SHealthBMITest PRIVATE --coverage)
+    target_link_options(SHealthBMITest PRIVATE --coverage)
+endif()
+
 
 include(GoogleTest)
 gtest_discover_tests(SHealthBMITest)
