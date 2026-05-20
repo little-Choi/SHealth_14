@@ -1,7 +1,28 @@
 #pragma once
 
+#include "SHealthConstants.h"
+
+#include <array>
 #include <string>
 #include <vector>
+
+enum class BmiCategory { Underweight, Normal, Overweight, Obesity };
+
+enum class AgeBand : int {
+    Twenties = 20,
+    Thirties = 30,
+    Forties = 40,
+    Fifties = 50,
+    Sixties = 60,
+    Seventies = 70
+};
+
+enum class BmiCategoryType : int {
+    Underweight = 100,
+    Normal = 200,
+    Overweight = 300,
+    Obesity = 400
+};
 
 class SHealth {
 public:
@@ -9,20 +30,25 @@ public:
     double getBmiRatio(int ageClass, int type);
 
 private:
-    int count = 0;
-    int ages[10000];
-    double heights[10000];
-    double weights[10000];
-    double bmis[10000];
+    static int ageBandIndex(int ageClass);
+    static int categoryIndex(int type);
+    static bool inAgeBand(int age, int bandStart);
+    static BmiCategory classifyBmi(double bmi) noexcept;
 
-    double underweight20 = 0, underweight30 = 0, underweight40 = 0;
-    double underweight50 = 0, underweight60 = 0, underweight70 = 0;
-    double normalweight20 = 0, normalweight30 = 0, normalweight40 = 0;
-    double normalweight50 = 0, normalweight60 = 0, normalweight70 = 0;
-    double overweight20 = 0, overweight30 = 0, overweight40 = 0;
-    double overweight50 = 0, overweight60 = 0, overweight70 = 0;
-    double obesity20 = 0, obesity30 = 0, obesity40 = 0;
-    double obesity50 = 0, obesity60 = 0, obesity70 = 0;
+    int loadFromCsv(const std::string& filename);
+    void imputeMissingWeights();
+    void computeAllBmis();
+    void aggregateRatiosByAgeBand();
+
+    double lookupRatio(int ageClass, int type) const;
+
+    int count = 0;
+    int ages[kMaxRecords];
+    double heights[kMaxRecords];
+    double weights[kMaxRecords];
+    double bmis[kMaxRecords];
+
+    std::array<std::array<double, 4>, AgeBandConfig::kNumBands> ratiosByBand_{};
 
     std::vector<std::string> split(const std::string& line, char delimiter);
 };

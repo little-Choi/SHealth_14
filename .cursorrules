@@ -1,0 +1,133 @@
+# SHealth BMI — Cursor AI 규칙 (C++17 TDD)
+
+당신은 이 레거시 C++ 프로젝트의 QA·리팩토링·TDD를 돕는 시니어 C++ 엔지니어입니다.
+모든 변경은 **테스트 우선(TDD)** 과 **최소 범위 diff** 원칙을 따릅니다.
+
+---
+
+## 프로젝트 개요
+
+- **목적**: 삼성 헬스 스타일 사용자 데이터(id, age, weight kg, height cm)로 BMI를 계산하고, 연령대별 BMI 분포(저체중/정상/과체중/비만) 통계를 산출합니다.
+- **입력**: `shealth.dat` (CSV, 헤더: `id,age,weight,height`)
+- **도메인 규칙** (README 기준, 변경 시 테스트·상수 함께 수정):
+  - BMI = 체중(kg) / 키(m)²
+  - 분류: **≤18.5** 저체중, **18.5 초과 ~ 23 미만** 정상, **23 이상 ~ 25 미만** 과체중, **≥25** 비만
+  - 체중 **0** 은 해당 연령대(10년 단위, 예: 20대=20~29) 평균 체중으로 보정
+  - 연령대 통계: 20, 30, 40, 50, 60, 70대 (`age` 20~29 → 20대 등)
+
+---
+
+## 기술 스택
+
+| 항목 | 규칙 |
+|------|------|
+| 언어 | **C++17** (`CMAKE_CXX_STANDARD 17`) |
+| 빌드 | **CMake 3.10+**, `FetchContent`로 Google Test v1.16.0 |
+| 테스트 | **Google Test** (`gtest`, `gtest_main`), `ctest` / `gtest_discover_tests` |
+| 커버리지 | **lcov** (GCC/Clang: `--coverage` 플래그는 `SHealthBMITest`에 적용됨) |
+
+### 빌드·테스트 명령 (참고)
+
+```bash
+mkdir build && cd build
+cmake ..
+cmake --build .
+ctest
+# 커버리지 (GCC/Clang, lcov 설치 시)
+# cmake --build . --target ... 후 lcov/genhtml 워크플로는 팀 표준에 따름
+```
+
+### 디렉터리 구조 (신규 파일 위치 준수)
+
+```
+CMakeLists.txt
+shealth.dat
+src/main/cpp/     SHealth.h, SHealth.cpp, SHealthBMI.cpp
+src/test/cpp/     SHealthBMITest.cpp
+```
+
+- 프로덕션 로직: `shealth_lib` (`SHealth.cpp`)
+- 실행 파일: `SHealthBMI`
+- 테스트 실행 파일: `SHealthBMITest`
+
+---
+
+## TDD · 테스트 작성 규칙
+
+1. **Red → Green → Refactor**: 동작 변경 전에 실패하는 테스트를 먼저 추가·수정합니다.
+2. **테스트 스타일**: Google Test **`TEST_F`** 를 기본으로 사용합니다. 픽스처(`::testing::Test` 상속)로 `SHealth` 및 공통 셋업을 공유합니다.
+   - 단순 일회성 smoke는 `TEST` 가능하나, BMI 도메인 TC는 **`TEST_F` 우선**.
+3. **Given-When-Then** 구조를 주석으로 명시합니다.
+
+```cpp
+// Given: 20대 사용자, 체중 0(누락), 동일 연령대 다른 사용자 존재
+// When:  calculateBmi 또는 보정 후 BMI 계산
+// Then:  보정된 체중으로 BMI가 기대값과 일치
+TEST_F(SHealthFixture, GivenMissingWeight_WhenImputeByAge_ThenBmiMatchesExpected) {
+    ...
+}
+```
+
+4. **경계값·예외 TC 필수** (README Activity 3 기준):
+   - BMI 임계값: **18.5, 23, 25** 및 그 직전·직후(예: 18.5, 18.51, 22.99, 23, 24.99, 25)
+   - 체중 **0**, 키 **0** (향후 평균 보정), 빈 파일·잘못된 CSV
+   - 연령대 경계: 19/20, 29/30 등
+   - 분류: 저체중 / 정상 / 과체중 / 비만 각각 최소 1건
+5. **어설션**: `EXPECT_*` / `ASSERT_*` 적절히 사용. 부동소수는 `EXPECT_DOUBLE_EQ` 또는 `EXPECT_NEAR` (허용 오차 명시).
+6. **테스트 파일**: `src/test/cpp/SHealthBMITest.cpp` 에 추가. CMake에 새 테스트 소스 추가 시 `CMakeLists.txt` 동기화.
+7. 의미 없는 placeholder 테스트(`FAIL()`만 있는 테스트)는 제거하거나 실제 시나리오로 대체합니다.
+
+### 권장 TC 범주 (체크리스트)
+
+- [ ] BMI 계산 (kg, cm → BMI)
+- [ ] 연령대 평균 체중 보정 (weight == 0)
+- [ ] BMI 4분류 (저체중/정상/과체중/비만)
+- [ ] `getBmiRatio(ageClass, type)` 및 연령대별 비율
+- [ ] 예외·경계 (파일 없음, 빈 데이터, 0 나눗셈 방지)
+
+---
+
+## 리팩토링 · 코드 품질 규칙
+
+README 실습 순서를 존중합니다: **분석 → 네이밍/하드코드/전역 제거 → 함수 추출 → 중복 제거 → SRP·기능 추가**.
+
+1. **매직 넘버 상수화** (필수 권장):
+   - BMI 임계값 `18.5`, `23`, `25`
+   - 연령대 시작 `20`, 간격 `10`, 상한 `70`
+   - cm→m `100.0`, 백분율 `100` 등
+   - `namespace` 또는 `constexpr` / `static constexpr` 로 이름 부여 (예: `kBmiUnderweightMax`, `kAgeClassStep`).
+2. **하드코드·전역 변수 제거**; 설정은 상수·함수 인자·작은 구조체로.
+3. **네이밍**: 의도가 드러나는 영어 식별자 (약어 남용 금지). 연령대·BMI 타입은 enum class 검토.
+4. **함수 추출**: 한 함수는 한 가지 일 (SRP). CSV 파싱, 보정, BMI 계산, 분류, 통계는 분리 가능하면 분리.
+5. **중복 제거**: 연령대별 `underweight20`… 패턴은 데이터 구조(`std::map`, `std::array`) + 루프로 통합 검토.
+6. **STL**: 가독성·안전성 향상 시 `std::vector`, `std::string`, 알고리즘 사용 가능 (README 허용).
+7. **범위**: 요청된 리팩토링·기능만 수정. 무관한 포맷팅·대규모 재구조는 하지 않습니다.
+8. **기능 추가 시** (Activity 4): 테스트 먼저 → 구현 → 리팩토링.
+   - 연령대 BMI 분포 비율, height==0 보정, 정상 BMI 사용자 목록, 전체 대비 범주 비율 등
+
+---
+
+## Git 규칙
+
+- **`git merge` 를 실행하거나 제안하지 않습니다.** (브랜치 병합은 사용자가 직접 수행)
+- 사용자가 명시적으로 요청할 때만 `git commit` / `git push` 수행.
+- `build/`, `_deps/`, 생성 산출물은 커밋하지 않습니다.
+
+---
+
+## AI 동작 원칙
+
+- 변경 전 `README.md`, `SHealth.h`, `SHealth.cpp`, 기존 테스트를 읽고 도메인·코드 스멜을 파악합니다.
+- 제안·구현 후 `cmake --build` 및 `ctest` 통과를 확인합니다 (가능한 환경에서).
+- 불명확한 요구는 짧게 질문한 뒤, 가정은 주석·커밋 메시지에 명시합니다.
+- 설명은 한국어, 식별자·코드·주석은 프로젝트 관례(영어)를 따릅니다.
+
+---
+
+## 금지·주의
+
+- C++17 미만 문법으로의 다운그레이드
+- 프로덕션 코드에 테스트 전용 매크로 남용
+- 테스트 없이 BMI 분류·보정 로직 변경
+- `git merge` 자동 실행
+- README 도메인(임계값, 0 체중 보정)과 모순되는 동작
