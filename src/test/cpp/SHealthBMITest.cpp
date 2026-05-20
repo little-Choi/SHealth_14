@@ -177,3 +177,143 @@ TEST_F(SHealthFixture, HeaderOnlyFileReturnsZeroCount) {
     EXPECT_EQ(health.calculateBmi(path), 0);
     removeTempFile(path);
 }
+
+TEST_F(SHealthFixture, ImputeMissingHeightByAgeBand) {
+    // Given: 20대 2명 — 키 170cm, 결측(0) 1명
+    const std::string path = writeTempCsv("1,25,60.0,170.0\n2,27,60.0,0.0\n");
+
+    // When
+    ASSERT_EQ(health.calculateBmi(path), 2);
+
+    // Then: 결측 키 보정 후 둘 다 정상 BMI → 20대 정상 100%
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kNormal), 100.0);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, ImputeMissingHeight_DoesNotCrossAgeBands) {
+    // Given: 20대 키 170, 30대 키 180·결측(0) — 각각 정상 BMI가 되도록 동일 체중
+    const std::string path =
+        writeTempCsv("1,25,60.0,170.0\n2,35,60.0,180.0\n3,37,60.0,0.0\n");
+
+    // When
+    health.calculateBmi(path);
+
+    // Then: 30대 결측은 30대 평균(180)만 반영 — 연령대별 정상 100%
+    EXPECT_EQ(health.getBmiRatio(30, BmiTypeCode::kNormal), 100.0);
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kNormal), 100.0);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, ImputeMissingHeight_AllZeroInBand_SkipsSafely) {
+    // Given: 20대 전원 키 결측(0)
+    const std::string path = writeTempCsv("1,25,60.0,0.0\n2,27,60.0,0.0\n");
+
+    // When / Then: 0 나눗셈 없이 완료
+    EXPECT_EQ(health.calculateBmi(path), 2);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, ImputeMissingHeightAndWeight_BothImputed) {
+    // Given: 20대 — 체중·키 모두 유효 1명, 나머지 결측
+    const std::string path = writeTempCsv("1,25,60.0,170.0\n2,27,0.0,0.0\n");
+
+    // When
+    ASSERT_EQ(health.calculateBmi(path), 2);
+
+    // Then: 보정 후 정상 BMI 100%
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kNormal), 100.0);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetNormalBmiUserIds_ExcludesBoundaryValues) {
+    // Given: 저체중(18.5)·정상·과체중(23)·비만 경계 4명
+    const std::string path = writeTempCsv(fourBmiBoundaryRows(25, 25, 25, 25));
+
+    // When
+    health.calculateBmi(path);
+    const std::vector<int> normalIds = health.getNormalBmiUserIds();
+
+    // Then: 정상 구간(18.5 < BMI < 23) 사용자 id=2만
+    ASSERT_EQ(normalIds.size(), 1u);
+    EXPECT_EQ(normalIds[0], 2);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetNormalBmiUserIds_EmptyWhenNone) {
+    // Given: 비만 경계만 1명 (BMI 25.0)
+    const std::string path = writeTempCsv("4,25,100.0,200.0\n");
+
+    // When
+    health.calculateBmi(path);
+    const std::vector<int> normalIds = health.getNormalBmiUserIds();
+
+    // Then
+    EXPECT_TRUE(normalIds.empty());
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetGlobalBmiRatio_SumsToOneHundred) {
+    // Given: 4분류 경계 각 1명
+    const std::string path = writeTempCsv(fourBmiBoundaryRows(25, 25, 25, 25));
+
+    // When
+    health.calculateBmi(path);
+
+    // Then: 전체 4범주 합 100%
+    const double sum = health.getGlobalBmiRatio(BmiTypeCode::kUnderweight) +
+                       health.getGlobalBmiRatio(BmiTypeCode::kNormal) +
+                       health.getGlobalBmiRatio(BmiTypeCode::kOverweight) +
+                       health.getGlobalBmiRatio(BmiTypeCode::kObesity);
+    EXPECT_NEAR(sum, 100.0, 0.01);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetGlobalBmiRatio_EachCategoryQuarterPercent) {
+    // Given: 4분류 경계 각 1명
+    const std::string path = writeTempCsv(fourBmiBoundaryRows(25, 25, 25, 25));
+
+    // When
+    health.calculateBmi(path);
+
+    // Then: 전체 대비 각 25%
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kUnderweight), 25.0);
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kNormal), 25.0);
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kOverweight), 25.0);
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kObesity), 25.0);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetGlobalBmiRatio_DiffersFromSingleAgeBand) {
+    // Given: 20대 정상 1명, 30대 비만 1명
+    const std::string path =
+        writeTempCsv("1,25,70.0,175.0\n4,35,100.0,200.0\n");
+
+    // When
+    health.calculateBmi(path);
+
+    // Then: 20대는 정상 100%, 전체는 정상·비만 각 50%
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kNormal), 100.0);
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kNormal), 50.0);
+    EXPECT_EQ(health.getGlobalBmiRatio(BmiTypeCode::kObesity), 50.0);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetBmiRatio_SpecificAgeBandDistribution) {
+    // Given: 30대만 4분류 경계 4명
+    const std::string path = writeTempCsv(fourBmiBoundaryRows(30, 33, 36, 39));
+
+    // When
+    health.calculateBmi(path);
+
+    // Then: 30대 BMI 분포 각 25% (연령대별 API)
+    expectAllCategoriesQuarterPercent(health, 30);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GetGlobalBmiRatio_InvalidTypeReturnsZero) {
+    // Given
+    health.calculateBmi("shealth.dat");
+
+    // When / Then
+    EXPECT_EQ(health.getGlobalBmiRatio(500), 0.0);
+}
