@@ -43,8 +43,53 @@ cmake --build .
 ### 테스트 실행
 ```bash
 cd build
-ctest
+ctest --output-on-failure
 ```
+
+현재 **26건** (단위 24 + Golden Master 2). `ctest`는 `WORKING_DIRECTORY`를 프로젝트 루트로 설정하므로 `shealth.dat`를 찾을 수 있습니다.
+
+### Golden Master (Approval) 회귀 테스트
+
+TexttestFixture 스타일로 **고정 텍스트 스냅샷**과 비교합니다. 리팩토링 시 `shealth.dat` 기준 6×4 연령대 비율·전체 비율이 바뀌면 실패합니다.
+
+| 경로 | 역할 |
+|------|------|
+| `src/test/golden/*.approved.txt` | 승인(기대) 출력 — **Git에 커밋** |
+| `build/test_output/golden/*.actual.txt` | 실패 시 실제 출력 (로컬만, `build/`는 무시) |
+| `src/test/cpp/golden/GoldenMaster.h` | 파일 읽기·정규화·diff·`SHEALTH_UPDATE_GOLDEN` |
+| `src/test/cpp/SHealthGoldenTest.cpp` | T-027 등 Golden `TEST_F` |
+
+**실행**
+
+```bash
+cd build
+ctest -R Golden --output-on-failure
+# 또는
+./SHealthBMITest --gtest_filter=SHealthGoldenFixture.*
+# (프로젝트 루트에서 실행하거나 ctest 사용)
+```
+
+**기대값 갱신** (의도된 동작 변경 후, diff 검토 필수)
+
+```bash
+# Windows (PowerShell, repo root)
+$env:SHEALTH_UPDATE_GOLDEN = "1"
+cd build
+./SHealthBMITest.exe --gtest_filter=SHealthGoldenFixture.*
+Remove-Item Env:SHEALTH_UPDATE_GOLDEN
+
+# 또는
+./scripts/update_golden.ps1
+```
+
+```bash
+# Linux / macOS
+SHEALTH_UPDATE_GOLDEN=1 ./build/SHealthBMITest --gtest_filter='SHealthGoldenFixture.*'
+# 또는
+./scripts/update_golden.sh
+```
+
+**CI**: `.github/workflows/ci.yml` — push/PR 시 `cmake` 빌드 후 `ctest` 자동 실행.
 
 
 ## 프로젝트 구조
@@ -57,7 +102,13 @@ src/
     SHealth.cpp        - BMI 계산 및 통계 로직 구현
     SHealthBMI.cpp     - main 함수 (프로그램 진입점)
   test/cpp/
-    SHealthBMITest.cpp - Google Test 기반 단위 테스트
+    SHealthBMITest.cpp      - Google Test 단위 테스트
+    SHealthGoldenTest.cpp   - Golden Master 회귀 테스트
+    golden/                 - 스냅샷 포맷·비교 유틸
+  test/golden/
+    *.approved.txt          - 승인된 기대 출력
+.github/workflows/ci.yml    - CI (ctest)
+scripts/update_golden.*     - 기대값 재생성 스크립트
 ```
 
 
