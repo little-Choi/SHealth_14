@@ -136,6 +136,31 @@ TEST_F(SHealthFixture, SixtiesBand_AllBmiCategoriesAtBoundaries) {
     removeTempFile(path);
 }
 
+TEST_F(SHealthFixture, SeventiesBand_AllBmiCategoriesAtBoundaries) {
+    // Given: 70대(70~79세) 4명 — BMI 18.5 / 정상 / 23.0 / 25.0 경계값
+    const std::string path = writeTempCsv(fourBmiBoundaryRows(70, 73, 76, 79));
+
+    // When
+    ASSERT_EQ(health.calculateBmi(path), 4);
+
+    // Then
+    expectAllCategoriesQuarterPercent(health, 70);
+    removeTempFile(path);
+}
+
+TEST_F(SHealthFixture, GivenWeight70Height175_WhenCalculate_ThenNormal100Percent) {
+    // Given: BMI = 70 / (1.75)^2 ≈ 22.86 (정상 구간)
+    const std::string path = writeTempCsv("1,25,70.0,175.0\n");
+
+    // When
+    ASSERT_EQ(health.calculateBmi(path), 1);
+
+    // Then
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kNormal), 100.0);
+    EXPECT_EQ(health.getBmiRatio(20, BmiTypeCode::kUnderweight), 0.0);
+    removeTempFile(path);
+}
+
 TEST_F(SHealthFixture, ImputeMissingWeightByAgeBand) {
     const std::string path = writeTempCsv("1,25,60.0,170.0\n2,27,0.0,170.0\n");
     health.calculateBmi(path);
