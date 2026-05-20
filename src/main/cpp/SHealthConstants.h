@@ -21,6 +21,7 @@ constexpr int kObesity = 400;
 }  // namespace BmiTypeCode
 
 namespace CsvColumn {
+constexpr int kId = 0;
 constexpr int kAge = 1;
 constexpr int kWeight = 2;
 constexpr int kHeight = 3;
@@ -30,3 +31,4 @@ constexpr int kMaxRecords = 10000;
 constexpr double kCentimetersPerMeter = 100.0;
 constexpr double kPercentMultiplier = 100.0;
 constexpr double kMissingWeight = 0.0;
+constexpr double kMissingHeight = 0.0;

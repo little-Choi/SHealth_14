@@ -28,6 +28,8 @@ class SHealth {
 public:
     int calculateBmi(const std::string& filename);
     double getBmiRatio(int ageClass, int type);
+    double getGlobalBmiRatio(int type) const;
+    std::vector<int> getNormalBmiUserIds() const;
 
 private:
     static int ageBandIndex(int ageClass);
@@ -37,18 +39,22 @@ private:
 
     int loadFromCsv(const std::string& filename);
     void imputeMissingWeights();
+    void imputeMissingHeights();
     void computeAllBmis();
     void aggregateRatiosByAgeBand();
+    void aggregateGlobalRatios();
 
     double lookupRatio(int ageClass, int type) const;
 
     int count = 0;
+    int ids[kMaxRecords];
     int ages[kMaxRecords];
     double heights[kMaxRecords];
     double weights[kMaxRecords];
     double bmis[kMaxRecords];
 
     std::array<std::array<double, 4>, AgeBandConfig::kNumBands> ratiosByBand_{};
+    std::array<double, 4> globalRatios_{};
 
     std::vector<std::string> split(const std::string& line, char delimiter);
 };

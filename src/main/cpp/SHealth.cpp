@@ -55,13 +55,16 @@ BmiCategory SHealth::classifyBmi(double bmi) noexcept {
 
 int SHealth::calculateBmi(const std::string& filename) {
     ratiosByBand_.fill({});
+    globalRatios_.fill(0.0);
     count = loadFromCsv(filename);
     if (count == 0) {
         return count;
     }
     imputeMissingWeights();
+    imputeMissingHeights();
     computeAllBmis();
     aggregateRatiosByAgeBand();
+    aggregateGlobalRatios();
     return count;
 }
 
@@ -80,6 +83,7 @@ int SHealth::loadFromCsv(const std::string& filename) {
         if (tokens.empty()) {
             break;
         }
+        ids[count] = std::stoi(tokens[CsvColumn::kId]);
         ages[count] = std::stoi(tokens[CsvColumn::kAge]);
         weights[count] = std::stod(tokens[CsvColumn::kWeight]);
         heights[count] = std::stod(tokens[CsvColumn::kHeight]);
@@ -111,6 +115,34 @@ void SHealth::imputeMissingWeights() {
         for (int i = 0; i < count; i++) {
             if (inAgeBand(ages[i], bandStart) && weights[i] == kMissingWeight) {
                 weights[i] = average;
+            }
+        }
+    }
+}
+
+void SHealth::imputeMissingHeights() {
+    for (int bandStart = AgeBandConfig::kMinAgeBand;
+         bandStart <= AgeBandConfig::kMaxAgeBand;
+         bandStart += AgeBandConfig::kAgeBandWidth) {
+        double sum = 0.0;
+        int ageCount = 0;
+        for (int i = 0; i < count; i++) {
+            if (!inAgeBand(ages[i], bandStart)) {
+                continue;
+            }
+            if (heights[i] == kMissingHeight) {
+                continue;
+            }
+            sum += heights[i];
+            ageCount++;
+        }
+        if (ageCount == 0) {
+            continue;
+        }
+        const double average = sum / static_cast<double>(ageCount);
+        for (int i = 0; i < count; i++) {
+            if (inAgeBand(ages[i], bandStart) && heights[i] == kMissingHeight) {
+                heights[i] = average;
             }
         }
     }
@@ -152,6 +184,25 @@ void SHealth::aggregateRatiosByAgeBand() {
     }
 }
 
+void SHealth::aggregateGlobalRatios() {
+    globalRatios_.fill(0.0);
+    if (count == 0) {
+        return;
+    }
+
+    std::array<int, 4> categoryCounts{};
+    for (int i = 0; i < count; i++) {
+        const int idx = toCategoryIndex(classifyBmi(bmis[i]));
+        categoryCounts[static_cast<size_t>(idx)]++;
+    }
+
+    for (int category = 0; category < 4; category++) {
+        globalRatios_[static_cast<size_t>(category)] =
+            static_cast<double>(categoryCounts[static_cast<size_t>(category)]) *
+            kPercentMultiplier / static_cast<double>(count);
+    }
+}
+
 double SHealth::lookupRatio(int ageClass, int type) const {
     const int bandIdx = ageBandIndex(ageClass);
     const int catIdx = categoryIndex(type);
@@ -163,6 +214,24 @@ double SHealth::lookupRatio(int ageClass, int type) const {
 
 double SHealth::getBmiRatio(int ageClass, int type) {
     return lookupRatio(ageClass, type);
+}
+
+double SHealth::getGlobalBmiRatio(int type) const {
+    const int catIdx = categoryIndex(type);
+    if (catIdx < 0) {
+        return 0.0;
+    }
+    return globalRatios_[static_cast<size_t>(catIdx)];
+}
+
+std::vector<int> SHealth::getNormalBmiUserIds() const {
+    std::vector<int> normalIds;
+    for (int i = 0; i < count; i++) {
+        if (classifyBmi(bmis[i]) == BmiCategory::Normal) {
+            normalIds.push_back(ids[i]);
+        }
+    }
+    return normalIds;
 }
 
 std::vector<std::string> SHealth::split(const std::string& line, char delimiter) {
