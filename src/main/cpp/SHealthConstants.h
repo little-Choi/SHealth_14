@@ -13,6 +13,10 @@ constexpr int kAgeBandWidth = 10;
 constexpr int kNumBands = 6;
 }  // namespace AgeBandConfig
 
+namespace BmiCategoryConfig {
+constexpr int kCount = 4;
+}  // namespace BmiCategoryConfig
+
 namespace BmiTypeCode {
 constexpr int kUnderweight = 100;
 constexpr int kNormal = 200;
